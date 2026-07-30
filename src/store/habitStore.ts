@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Habit, HabitCategory, HabitFrequency } from '../types';
-import { getTodayStr } from '../utils/dateUtils';
+import { getTodayStr, isDayAllowedByFrequency } from '../utils/dateUtils';
 import { useAuthStore } from './authStore';
 import { usePlayerStore } from './playerStore';
 import {
@@ -92,23 +92,22 @@ export const useHabitStore = create<HabitState>()(
       },
 
       toggleCompletion: (habitId, dateStr) => {
-        let wasCompleted = false;
-        set((state) => {
-          for (const habit of state.habits) {
-            if (habit.id === habitId) {
-              wasCompleted = habit.completionHistory.includes(dateStr);
-              break;
-            }
-          }
+        const habit = get().habits.find((h) => h.id === habitId);
+        if (!habit) return;
+        // Block toggling if the frequency doesn't allow this day of the week
+        if (!isDayAllowedByFrequency(habit.frequency, dateStr)) return;
 
+        let wasCompleted = habit.completionHistory.includes(dateStr);
+
+        set((state) => {
           return {
-            habits: state.habits.map((habit) => {
-              if (habit.id !== habitId) return habit;
+            habits: state.habits.map((h) => {
+              if (h.id !== habitId) return h;
               return {
-                ...habit,
+                ...h,
                 completionHistory: wasCompleted
-                  ? habit.completionHistory.filter((d) => d !== dateStr)
-                  : [...habit.completionHistory, dateStr],
+                  ? h.completionHistory.filter((d) => d !== dateStr)
+                  : [...h.completionHistory, dateStr],
               };
             }),
           };

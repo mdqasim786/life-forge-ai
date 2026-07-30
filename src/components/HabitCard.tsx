@@ -63,6 +63,7 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, index }) => {
             completionHistory={habit.completionHistory}
             onToggle={handleToggle}
             createdAt={habit.createdAt}
+            frequency={habit.frequency}
           />
         </div>
       </div>

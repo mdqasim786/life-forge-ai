@@ -1,6 +1,7 @@
 // ─── Date Utility Functions ──────────────────────────────────────────────────
 
-import { format, subDays, isSameDay, isToday, parseISO, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { format, subDays, isSameDay, isToday, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, getDay } from 'date-fns';
+import type { HabitFrequency } from '../types';
 
 /** Get today's date as YYYY-MM-DD string */
 export const getTodayStr = (): string => format(new Date(), 'yyyy-MM-dd');
@@ -43,4 +44,25 @@ export const getCurrentWeekDays = (): string[] => {
 /** Check if a date string is in the completion history */
 export const isDateCompleted = (dateStr: string, completionHistory: string[]): boolean => {
   return completionHistory.some(d => d === dateStr);
+};
+
+/**
+ * Check whether the given date is allowed for the habit's frequency setting.
+ * - 'weekdays' → only Mon–Fri allowed
+ * - 'weekends'  → only Sat–Sun allowed
+ * - 'daily' / 'weekly' → any day allowed
+ */
+export const isDayAllowedByFrequency = (frequency: HabitFrequency, dateStr: string): boolean => {
+  const dayOfWeek = getDay(parseISO(dateStr)); // 0=Sun, 1=Mon … 6=Sat
+
+  switch (frequency) {
+    case 'weekdays':
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    case 'weekends':
+      return dayOfWeek === 0 || dayOfWeek === 6;
+    case 'daily':
+    case 'weekly':
+    default:
+      return true;
+  }
 };

@@ -2,19 +2,23 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { getLastNDaysAsc, formatDateDisplay, checkIsToday } from '../utils/dateUtils';
+import type { HabitFrequency } from '../types';
+import { getLastNDaysAsc, formatDateDisplay, checkIsToday, isDayAllowedByFrequency } from '../utils/dateUtils';
 
 interface WeekCalendarProps {
   completionHistory: string[];
   onToggle: (dateStr: string) => void;
   /** YYYY-MM-DD string of the habit's creation date */
   createdAt: string;
+  /** Habit frequency – used to restrict which days can be ticked */
+  frequency: HabitFrequency;
 }
 
 const WeekCalendar: React.FC<WeekCalendarProps> = ({
   completionHistory,
   onToggle,
   createdAt,
+  frequency,
 }) => {
   const last7Days = getLastNDaysAsc(7);
 
@@ -26,6 +30,8 @@ const WeekCalendar: React.FC<WeekCalendarProps> = ({
         // Check if this date is valid (habit existed on this date)
         const isValid = dateStr >= createdAt;
         const isFutureDate = dateStr > new Date().toISOString().split('T')[0];
+        const isDayAllowed = isDayAllowedByFrequency(frequency, dateStr);
+        const canToggle = isToday && isValid && !isFutureDate && isDayAllowed;
 
         return (
           <motion.button
@@ -33,27 +39,27 @@ const WeekCalendar: React.FC<WeekCalendarProps> = ({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.05, duration: 0.2 }}
-            whileHover={isToday && !isFutureDate ? { scale: 1.2 } : undefined}
-            whileTap={isToday && !isFutureDate ? { scale: 0.9 } : undefined}
+            whileHover={canToggle ? { scale: 1.2 } : undefined}
+            whileTap={canToggle ? { scale: 0.9 } : undefined}
             onClick={() => {
-              if (isToday && isValid && !isFutureDate) {
+              if (canToggle) {
                 onToggle(dateStr);
               }
             }}
-            disabled={!isToday || !isValid || isFutureDate}
+            disabled={!canToggle}
             className={`
               relative flex flex-col items-center gap-1 p-1.5 rounded-lg
               transition-all duration-200 min-w-[36px]
               ${isToday ? 'ring-2 ring-white/20' : ''}
               ${
-                !isValid || isFutureDate
+                !isValid || isFutureDate || !isDayAllowed
                   ? 'opacity-20 cursor-not-allowed'
                   : isToday
                   ? 'cursor-pointer'
                   : 'cursor-default'
               }
             `}
-            title={`${formatDateDisplay(dateStr)}${isToday ? ' (Today)' : ''}`}
+            title={`${formatDateDisplay(dateStr)}${isToday ? ' (Today)' : ''}${!isDayAllowed ? ' — not allowed for this frequency' : ''}`}
           >
             {/* Day label */}
             <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">
@@ -71,7 +77,7 @@ const WeekCalendar: React.FC<WeekCalendarProps> = ({
                   ? 'bg-white/10 border border-white/20'
                   : 'bg-white/5 border border-white/10'
                 }
-                ${isToday && isValid && !isFutureDate ? 'hover:bg-emerald-500/60' : ''}
+                ${canToggle ? 'hover:bg-emerald-500/60' : ''}
               `}
             >
               {isCompleted && (
