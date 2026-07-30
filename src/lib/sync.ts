@@ -5,6 +5,22 @@
 import { supabase } from './supabase';
 import type { Habit, Attributes } from '../types';
 
+/** Regenerate IDs that aren't valid UUIDs (needed for habits created before UUID fix) */
+const ensureValidUuid = (id: string): string => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(id)) {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  return id;
+};
+
 /* ─── Load: Pull all data from Supabase ─────────────────────────────────── */
 
 export interface SupabaseData {
@@ -77,7 +93,7 @@ export const syncAllToSupabase = async (
 
   if (habits.length > 0) {
     const habitRows = habits.map((h) => ({
-      id: h.id,
+      id: ensureValidUuid(h.id),
       user_id: userId,
       title: h.title,
       category: h.category,
@@ -89,7 +105,7 @@ export const syncAllToSupabase = async (
     const completionRows = habits.flatMap((h) =>
       h.completionHistory.map((date) => ({
         user_id: userId,
-        habit_id: h.id,
+        habit_id: ensureValidUuid(h.id),
         completion_date: date,
       }))
     );
@@ -114,7 +130,7 @@ export const syncHabitToSupabase = async (
 ): Promise<void> => {
   if (!supabase) return;
   await supabase.from('habits').upsert({
-    id: habit.id,
+    id: ensureValidUuid(habit.id),
     user_id: userId,
     title: habit.title,
     category: habit.category,
@@ -128,9 +144,10 @@ export const deleteHabitFromSupabase = async (
   habitId: string
 ): Promise<void> => {
   if (!supabase) return;
+  const safeId = ensureValidUuid(habitId);
   await Promise.all([
-    supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId),
-    supabase.from('completions').delete().eq('habit_id', habitId).eq('user_id', userId),
+    supabase.from('habits').delete().eq('id', safeId).eq('user_id', userId),
+    supabase.from('completions').delete().eq('habit_id', safeId).eq('user_id', userId),
   ]);
 };
 
@@ -142,9 +159,10 @@ export const addCompletionToSupabase = async (
   dateStr: string
 ): Promise<void> => {
   if (!supabase) return;
+  const safeId = ensureValidUuid(habitId);
   await supabase.from('completions').upsert({
     user_id: userId,
-    habit_id: habitId,
+    habit_id: safeId,
     completion_date: dateStr,
   }, { onConflict: 'habit_id,completion_date' });
 };
@@ -155,10 +173,11 @@ export const removeCompletionFromSupabase = async (
   dateStr: string
 ): Promise<void> => {
   if (!supabase) return;
+  const safeId = ensureValidUuid(habitId);
   await supabase
     .from('completions')
     .delete()
-    .eq('habit_id', habitId)
+    .eq('habit_id', safeId)
     .eq('user_id', userId)
     .eq('completion_date', dateStr);
 };

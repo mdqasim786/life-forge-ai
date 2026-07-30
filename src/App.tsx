@@ -43,54 +43,77 @@ const App: React.FC = () => {
   const loadHabits = useHabitStore((s) => s.loadHabits);
   const loadPlayerData = usePlayerStore((s) => s.loadPlayerData);
   const [syncing, setSyncing] = useState(false);
+  const localHabits = useHabitStore((s) => s.habits);
+  const lastSyncRef = useRef(0);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  // When auth state changes → load or clear data
+  // ── Initial sync: reconcile localStorage with Supabase ──────────────────
   useEffect(() => {
     if (!initialized) return;
 
     const syncData = async () => {
-      if (user) {
-        setSyncing(true);
-        const data = await loadAllFromSupabase(user.id);
+      if (!user) return;
 
-        if (data) {
-          // Supabase returned data → it is the source of truth
-          // Always use server data (even if 0 habits) to avoid re-uploading deleted items
-          if (data.habits.length > 0 || data.profile.joinDate) {
-            loadHabits(data.habits);
-            loadPlayerData({ profile: data.profile, attributes: data.attributes });
-            setSyncing(false);
-            return;
-          }
-        }
+      setSyncing(true);
+      const data = await loadAllFromSupabase(user.id);
+      const syncFlagKey = `life-forge-synced-${user.id}`;
+      const hasSyncedBefore = localStorage.getItem(syncFlagKey);
 
-        // No Supabase profile yet → this is a fresh user, migrate localStorage to cloud
-        const localHabits = useHabitStore.getState().habits;
-        const localPlayer = usePlayerStore.getState();
-
-        await syncAllToSupabase(
-          user.id,
-          localHabits,
-          localPlayer.profile,
-          localPlayer.attributes
-        );
+      if (data && data.habits.length > 0) {
+        // ── Server has habits → it's the source of truth ──
+        loadHabits(data.habits);
+        loadPlayerData({ profile: data.profile, attributes: data.attributes });
+        localStorage.setItem(syncFlagKey, 'true');
         setSyncing(false);
+        return;
       }
+
+      if (data && hasSyncedBefore) {
+        // ── Previously synced, but server is clean (user deleted everything on another device) ──
+        loadHabits(data.habits); // empty array
+        loadPlayerData({ profile: data.profile, attributes: data.attributes });
+        setSyncing(false);
+        return;
+      }
+
+      // ── First time logging in on this device → migrate local data to cloud ──
+      const localState = useHabitStore.getState();
+      const playerState = usePlayerStore.getState();
+
+      await syncAllToSupabase(
+        user.id,
+        localState.habits,
+        playerState.profile,
+        playerState.attributes
+      );
+
+      // Re-fetch from Supabase to ensure local state has the proper server-generated IDs
+      const refreshedData = await loadAllFromSupabase(user.id);
+      if (refreshedData) {
+        loadHabits(refreshedData.habits);
+        loadPlayerData({ profile: refreshedData.profile, attributes: refreshedData.attributes });
+      }
+      localStorage.setItem(syncFlagKey, 'true');
+      setSyncing(false);
     };
 
     syncData();
   }, [user, initialized, loadHabits, loadPlayerData]);
 
-  // Real-time subscription: listen for changes from other devices
+  // ── Real-time: listen for changes from OTHER devices ────────────────────
   const channelRef = useRef<any>(null);
   useEffect(() => {
     if (!user || !supabase) return;
 
     const reFetch = async () => {
+      // Debounce: ignore events that fire within 2s of our own last sync
+      const now = Date.now();
+      if (now - lastSyncRef.current < 2000) return;
+      lastSyncRef.current = now;
+
       const data = await loadAllFromSupabase(user.id);
       if (data) {
         loadHabits(data.habits);
@@ -98,7 +121,6 @@ const App: React.FC = () => {
       }
     };
 
-    // Subscribe to changes on habits, completions, and profiles tables
     channelRef.current = supabase
       .channel('life-forge-sync')
       .on(
@@ -109,11 +131,6 @@ const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'completions', filter: `user_id=eq.${user.id}` },
-        reFetch
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
         reFetch
       )
       .subscribe();

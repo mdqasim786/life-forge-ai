@@ -52,7 +52,7 @@ CREATE TRIGGER on_auth_user_created
 
 /* ─── Habits ────────────────────────────────────────────────────────────────── */
 CREATE TABLE IF NOT EXISTS habits (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          TEXT PRIMARY KEY,
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title       TEXT NOT NULL,
   category    TEXT NOT NULL,
@@ -64,9 +64,9 @@ CREATE INDEX IF NOT EXISTS idx_habits_user_id ON habits(user_id);
 
 /* ─── Completions ───────────────────────────────────────────────────────────── */
 CREATE TABLE IF NOT EXISTS completions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id              TEXT PRIMARY KEY,
   user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  habit_id        UUID NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  habit_id        TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
   completion_date DATE NOT NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (habit_id, completion_date)
