@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware';
 import type { Habit, HabitCategory, HabitFrequency } from '../types';
 import { getTodayStr } from '../utils/dateUtils';
 import { useAuthStore } from './authStore';
+import { usePlayerStore } from './playerStore';
 import {
   syncHabitToSupabase,
   deleteHabitFromSupabase,
@@ -72,6 +73,9 @@ export const useHabitStore = create<HabitState>()(
         if (userId) {
           syncHabitToSupabase(userId, newHabit);
         }
+
+        // Recalculate attributes
+        usePlayerStore.getState().recalculateAttributes();
       },
 
       removeHabit: (id) => {
@@ -82,6 +86,9 @@ export const useHabitStore = create<HabitState>()(
         if (userId) {
           deleteHabitFromSupabase(userId, id);
         }
+
+        // Recalculate attributes
+        usePlayerStore.getState().recalculateAttributes();
       },
 
       toggleCompletion: (habitId, dateStr) => {
@@ -116,6 +123,9 @@ export const useHabitStore = create<HabitState>()(
             addCompletionToSupabase(userId, habitId, dateStr);
           }
         }
+
+        // Recalculate attributes
+        usePlayerStore.getState().recalculateAttributes();
       },
 
       getHabit: (id) => {

@@ -1,6 +1,6 @@
 // ─── Analytics & Statistics Page ─────────────────────────────────────────────
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useHabitStore } from '../store/habitStore';
 import { usePlayerStore } from '../store/playerStore';
@@ -27,11 +27,7 @@ const ATTRIBUTE_COLORS: Record<string, string> = {
 
 const Analytics: React.FC = () => {
   const habits = useHabitStore((state) => state.habits);
-  const { attributes, recalculateAttributes, getOverallRating } = usePlayerStore();
-
-  useEffect(() => {
-    recalculateAttributes();
-  }, [habits, recalculateAttributes]);
+  const { attributes, getOverallRating } = usePlayerStore();
 
   const overallRating = getOverallRating();
   const totalCompletions = useMemo(() => getTotalCompletions(habits), [habits]);

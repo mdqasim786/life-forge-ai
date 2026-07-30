@@ -1,6 +1,6 @@
 // ─── Main Dashboard Page ─────────────────────────────────────────────────────
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useHabitStore } from '../store/habitStore';
@@ -13,12 +13,7 @@ import { getTodayStr } from '../utils/dateUtils';
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const habits = useHabitStore((state) => state.habits);
-  const { attributes, recalculateAttributes, getOverallRating } = usePlayerStore();
-
-  // Recalculate attributes whenever habits change
-  useEffect(() => {
-    recalculateAttributes();
-  }, [habits, recalculateAttributes]);
+  const { attributes, getOverallRating } = usePlayerStore();
 
   const totalCompletions = useMemo(() => getTotalCompletions(habits), [habits]);
   const streak = useMemo(() => calculateStreak(habits), [habits]);
