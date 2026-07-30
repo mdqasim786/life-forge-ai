@@ -4,9 +4,19 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Habit, HabitCategory, HabitFrequency } from '../types';
 import { getTodayStr } from '../utils/dateUtils';
+import { useAuthStore } from './authStore';
+import {
+  syncHabitToSupabase,
+  deleteHabitFromSupabase,
+  addCompletionToSupabase,
+  removeCompletionFromSupabase,
+} from '../lib/sync';
 
 interface HabitState {
   habits: Habit[];
+
+  /** Bulk-replace all habits (used when loading from Supabase) */
+  loadHabits: (habits: Habit[]) => void;
 
   /** Add a new habit */
   addHabit: (title: string, category: HabitCategory, frequency: HabitFrequency) => void;
@@ -34,6 +44,10 @@ export const useHabitStore = create<HabitState>()(
     (set, get) => ({
       habits: [],
 
+      loadHabits: (habits) => {
+        set({ habits });
+      },
+
       addHabit: (title, category, frequency) => {
         const newHabit: Habit = {
           id: generateId(),
@@ -44,26 +58,56 @@ export const useHabitStore = create<HabitState>()(
           completionHistory: [],
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
+
+        // Sync to Supabase if logged in
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          syncHabitToSupabase(userId, newHabit);
+        }
       },
 
       removeHabit: (id) => {
         set((state) => ({ habits: state.habits.filter((h) => h.id !== id) }));
+
+        // Sync to Supabase if logged in
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          deleteHabitFromSupabase(userId, id);
+        }
       },
 
       toggleCompletion: (habitId, dateStr) => {
-        set((state) => ({
-          habits: state.habits.map((habit) => {
-            if (habit.id !== habitId) return habit;
+        let wasCompleted = false;
+        set((state) => {
+          for (const habit of state.habits) {
+            if (habit.id === habitId) {
+              wasCompleted = habit.completionHistory.includes(dateStr);
+              break;
+            }
+          }
 
-            const exists = habit.completionHistory.includes(dateStr);
-            return {
-              ...habit,
-              completionHistory: exists
-                ? habit.completionHistory.filter((d) => d !== dateStr)
-                : [...habit.completionHistory, dateStr],
-            };
-          }),
-        }));
+          return {
+            habits: state.habits.map((habit) => {
+              if (habit.id !== habitId) return habit;
+              return {
+                ...habit,
+                completionHistory: wasCompleted
+                  ? habit.completionHistory.filter((d) => d !== dateStr)
+                  : [...habit.completionHistory, dateStr],
+              };
+            }),
+          };
+        });
+
+        // Sync to Supabase if logged in
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          if (wasCompleted) {
+            removeCompletionFromSupabase(userId, habitId, dateStr);
+          } else {
+            addCompletionToSupabase(userId, habitId, dateStr);
+          }
+        }
       },
 
       getHabit: (id) => {
