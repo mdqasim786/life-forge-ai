@@ -1,0 +1,108 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Orbitron', 'monospace'],
+      },
+      colors: {
+        bronze: {
+          50: '#fdf4e3',
+          100: '#f9e3c4',
+          200: '#f3c78a',
+          300: '#e8a54f',
+          400: '#d4832a',
+          500: '#b8651a',
+          600: '#964b14',
+          700: '#7a3b13',
+          800: '#633016',
+          900: '#4f2715',
+        },
+        silver: {
+          50: '#f8f9fa',
+          100: '#f1f3f5',
+          200: '#e9ecef',
+          300: '#dee2e6',
+          400: '#ced4da',
+          500: '#adb5bd',
+          600: '#868e96',
+          700: '#495057',
+          800: '#343a40',
+          900: '#212529',
+        },
+        gold: {
+          50: '#fffbea',
+          100: '#fff3c4',
+          200: '#ffe789',
+          300: '#ffd54f',
+          400: '#ffc107',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+        },
+        icon: {
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+        },
+        dark: {
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#1e1e2a',
+          800: '#15151f',
+          900: '#0a0a0f',
+          950: '#050508',
+        },
+      },
+      animation: {
+        'glow': 'glow 2s ease-in-out infinite alternate',
+        'glow-slow': 'glow 3s ease-in-out infinite alternate',
+        'float': 'float 3s ease-in-out infinite',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'shimmer': 'shimmer 2s linear infinite',
+        'rotate-gradient': 'rotate-gradient 4s linear infinite',
+      },
+      keyframes: {
+        glow: {
+          '0%': { boxShadow: '0 0 5px rgba(255,255,255,0.1), 0 0 10px rgba(255,255,255,0.05)' },
+          '100%': { boxShadow: '0 0 20px rgba(255,255,255,0.2), 0 0 40px rgba(255,255,255,0.1)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'rotate-gradient': {
+          '0%': { '--gradient-angle': '0deg' },
+          '100%': { '--gradient-angle': '360deg' },
+        },
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      },
+    },
+  },
+  plugins: [],
+}
