@@ -1,6 +1,6 @@
 // ─── Main Application ────────────────────────────────────────────────────────
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Layout from './components/Layout';
@@ -13,7 +13,7 @@ import { useAuthStore } from './store/authStore';
 import { useHabitStore } from './store/habitStore';
 import { usePlayerStore } from './store/playerStore';
 import { loadAllFromSupabase, syncAllToSupabase } from './lib/sync';
-import { isSupabaseConfigured } from './lib/supabase';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
 
 /** Loading splash screen shown while auth state is being resolved */
 const LoadingScreen: React.FC = () => (
@@ -55,41 +55,76 @@ const App: React.FC = () => {
     const syncData = async () => {
       if (user) {
         setSyncing(true);
-        // Try loading from Supabase
         const data = await loadAllFromSupabase(user.id);
 
-        if (data && data.habits.length > 0) {
-          // Supabase has data → use it (source of truth)
-          loadHabits(data.habits);
-          loadPlayerData({ profile: data.profile, attributes: data.attributes });
-        } else {
-          // No Supabase data yet → migrate localStorage data to cloud
-          const localHabits = useHabitStore.getState().habits;
-          const localPlayer = usePlayerStore.getState();
-
-          if (localHabits.length > 0) {
-            await syncAllToSupabase(
-              user.id,
-              localHabits,
-              localPlayer.profile,
-              localPlayer.attributes
-            );
-          } else {
-            // Fresh user with no data → create default profile in Supabase
-            await syncAllToSupabase(
-              user.id,
-              [],
-              localPlayer.profile,
-              localPlayer.attributes
-            );
+        if (data) {
+          // Supabase returned data → it is the source of truth
+          // Always use server data (even if 0 habits) to avoid re-uploading deleted items
+          if (data.habits.length > 0 || data.profile.joinDate) {
+            loadHabits(data.habits);
+            loadPlayerData({ profile: data.profile, attributes: data.attributes });
+            setSyncing(false);
+            return;
           }
         }
+
+        // No Supabase profile yet → this is a fresh user, migrate localStorage to cloud
+        const localHabits = useHabitStore.getState().habits;
+        const localPlayer = usePlayerStore.getState();
+
+        await syncAllToSupabase(
+          user.id,
+          localHabits,
+          localPlayer.profile,
+          localPlayer.attributes
+        );
         setSyncing(false);
       }
     };
 
     syncData();
   }, [user, initialized, loadHabits, loadPlayerData]);
+
+  // Real-time subscription: listen for changes from other devices
+  const channelRef = useRef<any>(null);
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    const reFetch = async () => {
+      const data = await loadAllFromSupabase(user.id);
+      if (data) {
+        loadHabits(data.habits);
+        loadPlayerData({ profile: data.profile, attributes: data.attributes });
+      }
+    };
+
+    // Subscribe to changes on habits, completions, and profiles tables
+    channelRef.current = supabase
+      .channel('life-forge-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'habits', filter: `user_id=eq.${user.id}` },
+        reFetch
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'completions', filter: `user_id=eq.${user.id}` },
+        reFetch
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        reFetch
+      )
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) {
+        supabase?.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [user, loadHabits, loadPlayerData]);
 
   // Show loading while auth is initializing or data is syncing
   if (loading || !initialized || (user && syncing)) {
