@@ -67,29 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) return { error: error.message };
 
-      // Auto-create profile in the profiles table
-      if (data.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: data.user.id,
-          name: 'LifeForge Player',
-          avatar: '',
-          join_date: new Date().toISOString(),
-          attributes: {
-            'Fitness & Diet': 50,
-            'Self Growth': 50,
-            Deen: 50,
-            'CS Scientist': 50,
-            'Agents Expert': 50,
-            'Human Being': 50,
-          },
-        });
-
-        if (profileError && profileError.code !== '23505') {
-          // 23505 = duplicate key, safe to ignore (profile already exists)
-          return { error: profileError.message };
-        }
-      }
-
+      // Profile is auto-created by the database trigger (handle_new_user)
       return {};
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Sign up failed' };
