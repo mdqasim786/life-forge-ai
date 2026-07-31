@@ -83,7 +83,7 @@ export const usePlayerStore = create<PlayerState>()(
         let base = state.attributesBase;
         let baseDate = state.attributesBaseDate;
         if (!baseDate) {
-          const todayDelta = calculateDayDelta(habits, today);
+          const todayDelta = calculateDayDelta(habits, today, { penalizeMissed: false });
           base = { ...state.attributes };
           for (const name of Object.keys(base) as AttributeName[]) {
             base[name] = base[name] - todayDelta[name];
@@ -98,7 +98,12 @@ export const usePlayerStore = create<PlayerState>()(
         // Today's contribution is recomputed fresh each time → IDEMPOTENT:
         // refreshing any number of times on the same day yields the exact
         // same result, so the rating can never drop on refresh.
-        const updated = applyAttributeDelta(base, calculateDayDelta(habits, today));
+        // Today's misses are NOT penalized — ticking gives +1 and unticking
+        // removes it; the -2 missed penalty only applies once the day passes.
+        const updated = applyAttributeDelta(
+          base,
+          calculateDayDelta(habits, today, { penalizeMissed: false })
+        );
 
         set({ attributes: updated, attributesBase: base, attributesBaseDate: yesterday });
 

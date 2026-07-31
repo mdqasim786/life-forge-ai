@@ -21,9 +21,17 @@ const zeroAttributes = (): Attributes => ({
 /**
  * Compute the attribute delta for ONE specific day based on completion history.
  * - +1 for each habit completed that day
- * - -2 for each habit that existed before that day but was NOT completed
+ * - -2 for each habit that existed before that day but was NOT completed —
+ *   only when `penalizeMissed` is true (the default). Pass
+ *   `{ penalizeMissed: false }` for TODAY so unticked habits cost nothing
+ *   until the day has passed (see `foldMissedDays`).
  */
-export const calculateDayDelta = (habits: Habit[], dayStr: string): Attributes => {
+export const calculateDayDelta = (
+  habits: Habit[],
+  dayStr: string,
+  options?: { penalizeMissed?: boolean }
+): Attributes => {
+  const { penalizeMissed = true } = options ?? {};
   const delta = zeroAttributes();
 
   for (const habit of habits) {
@@ -32,8 +40,8 @@ export const calculateDayDelta = (habits: Habit[], dayStr: string): Attributes =
 
     if (habit.completionHistory.includes(dayStr)) {
       delta[attr] += 1; // Completed → +1
-    } else if (habit.createdAt < dayStr) {
-      delta[attr] -= 2; // Missed → -2
+    } else if (penalizeMissed && habit.createdAt < dayStr) {
+      delta[attr] -= 2; // Missed → -2 (past days only)
     }
   }
 
@@ -86,7 +94,8 @@ export const foldMissedDays = (
  *
  * Rules:
  * - +1 for each completed habit today
- * - -2 for each existing habit NOT completed today
+ * - No penalty for today's misses (the -2 missed penalty only applies to
+ *   days that have already passed — see `foldMissedDays`)
  * - Attributes clamped to [1, 99]
  *
  * NOTE: This applies today's delta incrementally on top of the supplied
@@ -120,13 +129,10 @@ export const calculateAttributes = (
 
       if (wasCompletedToday) {
         delta += 1; // Completed → +1
-      } else {
-        // Only penalize if the habit was created before today
-        const createdBeforeToday = habit.createdAt < today;
-        if (createdBeforeToday) {
-          delta -= 2; // Missed → -2
-        }
       }
+      // Today's misses are NOT penalized — the -2 missed penalty only
+      // applies to days that have already passed (folded exactly once by
+      // foldMissedDays in playerStore.recalculateAttributes).
     }
 
     updated[attribute] = clamp(updated[attribute] + delta);
