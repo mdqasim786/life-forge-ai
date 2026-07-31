@@ -5,6 +5,18 @@
 import { supabase } from './supabase';
 import type { Habit, Attributes } from '../types';
 
+/* ─── Local write tracking (used to ignore realtime echoes of our own writes) */
+
+let lastLocalWriteTimestamp = 0;
+
+/** Record that this client just wrote to Supabase (fire-and-forget writes) */
+export const markLocalWrite = (): void => {
+  lastLocalWriteTimestamp = Date.now();
+};
+
+/** Timestamp of the last write performed by this client, or 0 if never */
+export const getLastLocalWrite = (): number => lastLocalWriteTimestamp;
+
 /** Regenerate IDs that aren't valid UUIDs (needed for habits created before UUID fix) */
 const ensureValidUuid = (id: string): string => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,6 +102,7 @@ export const syncAllToSupabase = async (
   attributes: Attributes
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
 
   if (habits.length > 0) {
     const habitRows = habits.map((h) => ({
@@ -129,6 +142,7 @@ export const syncHabitToSupabase = async (
   habit: Habit
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   await supabase.from('habits').upsert({
     id: ensureValidUuid(habit.id),
     user_id: userId,
@@ -144,6 +158,7 @@ export const deleteHabitFromSupabase = async (
   habitId: string
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   const safeId = ensureValidUuid(habitId);
   await Promise.all([
     supabase.from('habits').delete().eq('id', safeId).eq('user_id', userId),
@@ -159,6 +174,7 @@ export const addCompletionToSupabase = async (
   dateStr: string
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   const safeId = ensureValidUuid(habitId);
   await supabase.from('completions').upsert({
     user_id: userId,
@@ -173,6 +189,7 @@ export const removeCompletionFromSupabase = async (
   dateStr: string
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   const safeId = ensureValidUuid(habitId);
   await supabase
     .from('completions')
@@ -189,6 +206,7 @@ export const syncProfileToSupabase = async (
   profile: { name: string; avatar: string }
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   await supabase.from('profiles').upsert({
     id: userId,
     name: profile.name,
@@ -201,8 +219,52 @@ export const syncAttributesToSupabase = async (
   attributes: Attributes
 ): Promise<void> => {
   if (!supabase) return;
+  markLocalWrite();
   await supabase.from('profiles').upsert({
     id: userId,
     attributes,
   }, { onConflict: 'id' });
+};
+
+/* ─── Merge helper ───────────────────────────────────────────────────────── */
+
+/**
+ * Merge locally-persisted habits with server habits so no completions are lost.
+ *
+ * Server is authoritative for habit definitions (respects deletions made on
+ * other devices), but completion histories are UNION-ed: local ticks that were
+ * made right before a refresh (whose fire-and-forget sync may have been
+ * aborted by the browser) are preserved and merged back into the cloud copy.
+ *
+ * Local habits that never reached the server (e.g. created offline) are kept.
+ */
+export const mergeHabitsWithServer = (
+  localHabits: Habit[],
+  serverHabits: Habit[]
+): Habit[] => {
+  const serverIds = new Set(serverHabits.map((h) => h.id));
+
+  const merged = serverHabits.map((serverHabit) => {
+    const localHabit = localHabits.find((l) => l.id === serverHabit.id);
+    if (!localHabit) return serverHabit;
+
+    // Union of completion dates, de-duplicated
+    const completionHistory = Array.from(
+      new Set([...serverHabit.completionHistory, ...localHabit.completionHistory])
+    );
+
+    return {
+      ...serverHabit,
+      completionHistory,
+    };
+  });
+
+  // Keep local habits that have no server counterpart yet
+  for (const localHabit of localHabits) {
+    if (!serverIds.has(localHabit.id)) {
+      merged.push(localHabit);
+    }
+  }
+
+  return merged;
 };

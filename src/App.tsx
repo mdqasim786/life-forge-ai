@@ -12,7 +12,7 @@ import Auth from './pages/Auth';
 import { useAuthStore } from './store/authStore';
 import { useHabitStore } from './store/habitStore';
 import { usePlayerStore } from './store/playerStore';
-import { loadAllFromSupabase, syncAllToSupabase } from './lib/sync';
+import { loadAllFromSupabase, syncAllToSupabase, mergeHabitsWithServer, getLastLocalWrite } from './lib/sync';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 
 /** Loading splash screen shown while auth state is being resolved */
@@ -63,9 +63,28 @@ const App: React.FC = () => {
       const hasSyncedBefore = localStorage.getItem(syncFlagKey);
 
       if (data && data.habits.length > 0) {
-        // ── Server has habits → it's the source of truth ──
-        loadHabits(data.habits);
+        // ── Server has habits → MERGE with local so unsynced ticks survive ──
+        // Local (localStorage) may be fresher than the cloud: ticks made right
+        // before a refresh can have their fire-and-forget sync aborted by the
+        // browser, so we union the completion histories instead of replacing.
+        const localHabits = useHabitStore.getState().habits;
+        const mergedHabits = mergeHabitsWithServer(localHabits, data.habits);
+
+        loadHabits(mergedHabits);
         loadPlayerData({ profile: data.profile, attributes: data.attributes });
+
+        // Recalculate attributes from the merged completions (and re-sync them)
+        usePlayerStore.getState().recalculateAttributes();
+
+        // Push the merged state back to the cloud so nothing is lost
+        if (mergedHabits.length > 0) {
+          await syncAllToSupabase(
+            user.id,
+            mergedHabits,
+            usePlayerStore.getState().profile,
+            usePlayerStore.getState().attributes
+          );
+        }
         localStorage.setItem(syncFlagKey, 'true');
         setSyncing(false);
         return;
@@ -109,8 +128,11 @@ const App: React.FC = () => {
     if (!user || !supabase) return;
 
     const reFetch = async () => {
-      // Debounce: ignore events that fire within 2s of our own last sync
       const now = Date.now();
+      // Ignore realtime echoes of our OWN writes (they were already applied
+      // locally and persisted) — prevents stale fetches wiping fresh ticks
+      if (now - getLastLocalWrite() < 2000) return;
+      // Rate-limit consecutive fetches triggered by rapid events
       if (now - lastSyncRef.current < 2000) return;
       lastSyncRef.current = now;
 
