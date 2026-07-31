@@ -102,11 +102,14 @@ const App: React.FC = () => {
       const localState = useHabitStore.getState();
       const playerState = usePlayerStore.getState();
 
+      // Normalize attributes (idempotent) before pushing them to the cloud
+      usePlayerStore.getState().recalculateAttributes();
+
       await syncAllToSupabase(
         user.id,
         localState.habits,
         playerState.profile,
-        playerState.attributes
+        usePlayerStore.getState().attributes
       );
 
       // Re-fetch from Supabase to ensure local state has the proper server-generated IDs

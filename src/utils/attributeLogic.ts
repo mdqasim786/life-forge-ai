@@ -1,11 +1,85 @@
 // ─── Attribute Calculation Logic ─────────────────────────────────────────────
 
+import { format, addDays, subDays, parseISO } from 'date-fns';
 import type { Attributes, AttributeName, Habit, HabitCategory } from '../types';
 import { CATEGORY_ATTRIBUTE_MAP } from '../types';
 import { getTodayStr, getLastNDaysAsc } from './dateUtils';
 
 /** Clamp an attribute value between 1 and 99 */
 const clamp = (value: number): number => Math.max(1, Math.min(99, Math.round(value)));
+
+/** Build a zeroed attribute set (used for per-day deltas) */
+const zeroAttributes = (): Attributes => ({
+  'Fitness & Diet': 0,
+  'Self Growth': 0,
+  Deen: 0,
+  'CS Scientist': 0,
+  'Agents Expert': 0,
+  'Human Being': 0,
+});
+
+/**
+ * Compute the attribute delta for ONE specific day based on completion history.
+ * - +1 for each habit completed that day
+ * - -2 for each habit that existed before that day but was NOT completed
+ */
+export const calculateDayDelta = (habits: Habit[], dayStr: string): Attributes => {
+  const delta = zeroAttributes();
+
+  for (const habit of habits) {
+    const attr = CATEGORY_ATTRIBUTE_MAP[habit.category];
+    if (!attr) continue;
+
+    if (habit.completionHistory.includes(dayStr)) {
+      delta[attr] += 1; // Completed → +1
+    } else if (habit.createdAt < dayStr) {
+      delta[attr] -= 2; // Missed → -2
+    }
+  }
+
+  return delta;
+};
+
+/** Add a day-delta to a base attribute set, keeping values clamped to [1, 99] */
+export const applyAttributeDelta = (
+  base: Attributes,
+  delta: Attributes
+): Attributes => {
+  const updated: Attributes = { ...base };
+  for (const name of Object.keys(base) as AttributeName[]) {
+    updated[name] = clamp(base[name] + delta[name]);
+  }
+  return updated;
+};
+
+/**
+ * Fold every day between baseDate (exclusive) and today (exclusive) into the
+ * base attributes — each past day's +1/-2 delta is applied exactly ONCE.
+ *
+ * This is what makes attribute recalculation IDEMPOTENT: refreshing the page
+ * any number of times on the same day never re-applies today's (or any past
+ * day's) delta, so the rating can't bleed down on every refresh.
+ */
+export const foldMissedDays = (
+  base: Attributes,
+  baseDate: string, // YYYY-MM-DD
+  habits: Habit[],
+  today: string // YYYY-MM-DD
+): Attributes => {
+  let result = { ...base };
+  let cursor = addDays(parseISO(baseDate), 1);
+  const yesterday = subDays(parseISO(today), 1);
+
+  while (cursor <= yesterday) {
+    result = applyAttributeDelta(
+      result,
+      calculateDayDelta(habits, format(cursor, 'yyyy-MM-dd'))
+    );
+    cursor = addDays(cursor, 1);
+  }
+
+  return result;
+};
 
 /**
  * Calculate updated attributes based on today's habit completions.
@@ -14,6 +88,11 @@ const clamp = (value: number): number => Math.max(1, Math.min(99, Math.round(val
  * - +1 for each completed habit today
  * - -2 for each existing habit NOT completed today
  * - Attributes clamped to [1, 99]
+ *
+ * NOTE: This applies today's delta incrementally on top of the supplied
+ * attributes, so repeated calls compound. Prefer `calculateDayDelta` +
+ * `foldMissedDays` + `applyAttributeDelta` (see playerStore) for idempotent
+ * recalculation.
  */
 export const calculateAttributes = (
   currentAttributes: Attributes,
