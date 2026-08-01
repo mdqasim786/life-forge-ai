@@ -117,6 +117,7 @@ export const syncAllToSupabase = async (
 
     const completionRows = habits.flatMap((h) =>
       h.completionHistory.map((date) => ({
+        id: crypto.randomUUID(),
         user_id: userId,
         habit_id: ensureValidUuid(h.id),
         completion_date: date,
@@ -176,11 +177,13 @@ export const addCompletionToSupabase = async (
   if (!supabase) return;
   markLocalWrite();
   const safeId = ensureValidUuid(habitId);
-  await supabase.from('completions').upsert({
+  const { error } = await supabase.from('completions').upsert({
+    id: crypto.randomUUID(),
     user_id: userId,
     habit_id: safeId,
     completion_date: dateStr,
   }, { onConflict: 'habit_id,completion_date' });
+  if (error) console.error('[sync] addCompletionToSupabase failed:', error);
 };
 
 export const removeCompletionFromSupabase = async (
@@ -191,12 +194,13 @@ export const removeCompletionFromSupabase = async (
   if (!supabase) return;
   markLocalWrite();
   const safeId = ensureValidUuid(habitId);
-  await supabase
+  const { error } = await supabase
     .from('completions')
     .delete()
     .eq('habit_id', safeId)
     .eq('user_id', userId)
     .eq('completion_date', dateStr);
+  if (error) console.error('[sync] removeCompletionFromSupabase failed:', error);
 };
 
 /* ─── Profile & Attributes ──────────────────────────────────────────────── */

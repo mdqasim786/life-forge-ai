@@ -143,6 +143,12 @@ const App: React.FC = () => {
       if (data) {
         loadHabits(data.habits);
         loadPlayerData({ profile: data.profile, attributes: data.attributes });
+
+        // Recalculate attributes from the freshly-loaded habit completions
+        // so that attributesBase / attributesBaseDate stay consistent with
+        // the merged state — otherwise the base-snapshot math drifts after
+        // every cross-device sync.
+        usePlayerStore.getState().recalculateAttributes();
       }
     };
 
