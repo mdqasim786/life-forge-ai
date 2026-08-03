@@ -3,7 +3,7 @@
 import { format, addDays, subDays, parseISO } from 'date-fns';
 import type { Attributes, AttributeName, Habit, HabitCategory } from '../types';
 import { CATEGORY_ATTRIBUTE_MAP } from '../types';
-import { getTodayStr, getLastNDaysAsc } from './dateUtils';
+import { getTodayStr, getLastNDaysAsc, isDayAllowedByFrequency } from './dateUtils';
 
 /** Clamp an attribute value between 1 and 99 */
 const clamp = (value: number): number => Math.max(1, Math.min(99, Math.round(value)));
@@ -22,9 +22,10 @@ const zeroAttributes = (): Attributes => ({
  * Compute the attribute delta for ONE specific day based on completion history.
  * - +1 for each habit completed that day
  * - -2 for each habit that existed before that day but was NOT completed —
- *   only when `penalizeMissed` is true (the default). Pass
- *   `{ penalizeMissed: false }` for TODAY so unticked habits cost nothing
- *   until the day has passed (see `foldMissedDays`).
+ *   only when `penalizeMissed` is true (the default) AND the day was
+ *   clickable for the habit's frequency (e.g. a 'weekends' habit is never
+ *   penalized on Mon–Fri). Pass `{ penalizeMissed: false }` for TODAY so
+ *   unticked habits cost nothing until the day has passed (see `foldMissedDays`).
  */
 export const calculateDayDelta = (
   habits: Habit[],
@@ -40,8 +41,8 @@ export const calculateDayDelta = (
 
     if (habit.completionHistory.includes(dayStr)) {
       delta[attr] += 1; // Completed → +1
-    } else if (penalizeMissed && habit.createdAt < dayStr) {
-      delta[attr] -= 2; // Missed → -2 (past days only)
+    } else if (penalizeMissed && habit.createdAt < dayStr && isDayAllowedByFrequency(habit.frequency, dayStr)) {
+      delta[attr] -= 2; // Missed → -2 (past days only, and only if clickable that day)
     }
   }
 
