@@ -21,7 +21,7 @@ const zeroAttributes = (): Attributes => ({
 /**
  * Compute the attribute delta for ONE specific day based on completion history.
  * - +1 for each habit completed that day
- * - -2 for each habit that existed before that day but was NOT completed —
+ * - -1 for each habit that existed before that day but was NOT completed —
  *   only when `penalizeMissed` is true (the default) AND the day was
  *   clickable for the habit's frequency (e.g. a 'weekends' habit is never
  *   penalized on Mon–Fri). Pass `{ penalizeMissed: false }` for TODAY so
@@ -42,7 +42,7 @@ export const calculateDayDelta = (
     if (habit.completionHistory.includes(dayStr)) {
       delta[attr] += 1; // Completed → +1
     } else if (penalizeMissed && habit.createdAt < dayStr && isDayAllowedByFrequency(habit.frequency, dayStr)) {
-      delta[attr] -= 2; // Missed → -2 (past days only, and only if clickable that day)
+      delta[attr] -= 1; // Missed → -1 (past days only, and only if clickable that day)
     }
   }
 
